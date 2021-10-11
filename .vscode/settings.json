@@ -1,0 +1,7 @@
+{
+    "C_Cpp.intelliSenseEngineFallback": "Enabled",
+    "files.associations": {
+        "main.h": "c",
+        "stm32f1xx.h": "c"
+    }
+}
