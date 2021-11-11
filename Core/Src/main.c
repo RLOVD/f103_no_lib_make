@@ -6,15 +6,63 @@
 
 void SystemClock_Config(void);
 static void GPIO_Init(void);
+static void uart1_init(void);
+void uart1_send_byte(uint8_t byte);
+void uart1_send_str(char *str);
+void executor(void);
 
-int main(void)
+struct array_func {
+    void (*callback)(void);
+};
+
+struct array_func array_func[3]; //массив функций
+
+void func1(void)
 {
+    char str[] = "Im func1\r\n";
+    uart1_send_str(str);
+}
+
+void func2(void)
+{
+    char str[] = "Im func2\r\n";
+    uart1_send_str(str);
+}
+
+void func3(void)
+{
+    char str[] = "Im func3\r\n";
+    uart1_send_str(str);
+}
+
+int main(void) {
     SystemClock_Config();
     GPIO_Init();
+    uart1_init();
 
     while (1) {
         for (volatile uint32_t i = 0; i < 300000; i++) {}
         GPIOC->ODR ^= GPIO_PIN_13;
+
+        array_func[0].callback = func1;
+        array_func[1].callback = func2;
+        array_func[2].callback = func3;
+        executor();
+        uart1_send_str("\r\n");
+        // переназначаем функции в массиве
+        array_func[0].callback = func2;
+        array_func[1].callback = func1;
+        array_func[2].callback = func3;
+        executor();
+        uart1_send_str("\r\n end \r\n");
+    }
+}
+
+//последовательно выполняет функции
+void executor(void)
+{
+    for (uint8_t i = 0; i < 3; i++) {
+        array_func[i].callback();
     }
 }
 
@@ -106,6 +154,50 @@ static void GPIO_Init(void)
     //MODE: выход с максимальной частотой 2 МГц
     //CNF: режим push-pull
     GPIOC->CRH |= (0x02 << GPIO_CRH_MODE13_Pos) | (0x00 << GPIO_CRH_CNF13_Pos);
+}
+
+static void uart1_init(void)
+{
+    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;    // тактирование порта A
+    RCC->APB2ENR |= RCC_APB2ENR_USART1EN;  // включаем тактирование UART1
+
+    // настройка вывода PA9 (TX1) на режим альтернативной функции с активным выходом
+    GPIOA->CRH &= (~GPIO_CRH_CNF9_0);
+    GPIOA->CRH |= (GPIO_CRH_CNF9_1 | GPIO_CRH_MODE9);
+
+    // настройка вывода PA10 (RX1) на режим входа с подтягивающим резистором
+    GPIOA->CRH &= (~GPIO_CRH_CNF10_0);
+    GPIOA->CRH |= GPIO_CRH_CNF10_1;
+    GPIOA->CRH &= (~(GPIO_CRH_MODE10));
+    GPIOA->BSRR |= GPIO_ODR_ODR10;
+
+    USART1->CR1 = USART_CR1_UE;  // разрешаем USART1, сбрасываем остальные биты
+
+    //USART_BRR = (Fck / (16 * BAUD)) * 16 = 16000000 / 9600 = 1666,666
+
+    USART1->BRR = 1667;  // скорость 9600 бод , пока что в тупняка влупил без вычисления , сейчас не суть))
+
+    //Разрешаем работу приемника и передатчика
+    USART1->CR1 |= USART_CR1_TE | USART_CR1_RE;  // разрешаем приемник и передатчик
+    USART1->CR2 = 0;
+    USART1->CR3 = 0;
+}
+
+void uart1_send_byte(uint8_t byte)
+{
+    while ((USART1->SR & USART_SR_TXE) == 0) {
+    }
+    USART1->DR = byte;
+}
+
+void uart1_send_str(char *str)
+{
+    while (*str != '\0') {
+        while ((USART1->SR & USART_SR_TXE) == 0) {
+        }
+        USART1->DR = *str;
+        str++;
+    }
 }
 
 void Error_Handler(void) 
