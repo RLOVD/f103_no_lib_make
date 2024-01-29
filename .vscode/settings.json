@@ -2,6 +2,11 @@
     "C_Cpp.intelliSenseEngineFallback": "Enabled",
     "files.associations": {
         "main.h": "c",
-        "stm32f1xx.h": "c"
-    }
+        "stm32f1xx.h": "c",
+        "stm32f1xx_it.h": "c"
+    },
+
+    "cortex-debug.gdbPath": "/usr/bin/arm-none-eabi-gdb",
+    "cortex-debug.stutilPath": "/usr/bin/st-util",
+    "CodeGPT.apiKey": "CodeGPT Plus Beta"
 }
