@@ -35,7 +35,6 @@ BIN_DIR = bin
 # C sources
 C_SOURCES =  \
 Core/Src/main.c \
-Core/Src/stm32f1xx_it.c \
 Core/Src/system_stm32f1xx.c  
 
 # ASM sources
@@ -84,8 +83,9 @@ AS_DEFS =
 
 # C defines
 C_DEFS =  \
--DSTM32F103xB
-
+-DSTM32F103xB \
+-DUSER_VECT_TAB_ADDRESS \
+#-DBUILD_BOOTLOADER
 
 
 # AS includes
@@ -116,7 +116,12 @@ CFLAGS += -MMD -MP -MF"$(@:%.o=%.d)"
 # LDFLAGS
 #######################################
 # link script
-LDSCRIPT = STM32F103C8Tx_FLASH.ld
+# Нужно расскоментировать ОДИН! в зависимости что собираем, boot или app
+# Скрипт для загрузчика
+# LDSCRIPT = STM32F103C8Tx_FLASH.ld
+
+# Скрипт для основной прошивки
+LDSCRIPT = STM32F103C8Tx_FLASH_app.ld
 
 # libraries
 LIBS = -lc -lm -lnosys 

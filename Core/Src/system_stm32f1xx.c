@@ -108,8 +108,12 @@
 #else
 #define VECT_TAB_BASE_ADDRESS   FLASH_BASE      /*!< Vector Table base address field.
                                                      This value must be a multiple of 0x200. */
+#if defined(BUILD_BOOTLOADER)
 #define VECT_TAB_OFFSET         0x00000000U     /*!< Vector Table base offset field.
                                                      This value must be a multiple of 0x200. */
+#else
+#define VECT_TAB_OFFSET         0x00002000U     // смещение для основного приложения
+#endif /* BUILD_BOOTLOADER */
 #endif /* VECT_TAB_SRAM */
 #endif /* USER_VECT_TAB_ADDRESS */
 

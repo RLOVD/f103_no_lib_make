@@ -2,20 +2,29 @@
 #include "main.h"
 #include "stm32f1xx.h"
 
-#define GPIO_PIN_13         (1 << 13)
+#define GPIO_PIN_13                                 (1U << 13)
+
+#define FLASH_APP_START_ADDRESS                     0x08002000U
+
+#define SYSCLOCK                                    16000000U
+
+//#define BUILD_BOOTLOADER
 
 void SystemClock_Config(void);
 static void GPIO_Init(void);
+void delay_ms(uint32_t ms);
+
 static void uart1_init(void);
 void uart1_send_byte(uint8_t byte);
 void uart1_send_str(char *str);
-void executor(void);
 
-struct array_func {
-    void (*callback)(void);
-};
+/* Function pointer for jumping to user application. */
+typedef void (*pfunction)(void);
+void flash_jump_to_app(void);
 
-struct array_func array_func[3]; //массив функций
+
+static volatile uint32_t tick = 0;
+static volatile uint32_t delay_cnt = 0;
 
 void func1(void)
 {
@@ -23,48 +32,70 @@ void func1(void)
     uart1_send_str(str);
 }
 
-void func2(void)
+void SysTick_Init(void)
 {
-    char str[] = "Im func2\r\n";
-    uart1_send_str(str);
-}
-
-void func3(void)
-{
-    char str[] = "Im func3\r\n";
-    uart1_send_str(str);
+    MODIFY_REG(SysTick->LOAD, SysTick_LOAD_RELOAD_Msk, SYSCLOCK / 1000 - 1);
+    CLEAR_BIT(SysTick->VAL, SysTick_VAL_CURRENT_Msk);
+    SET_BIT(SysTick->CTRL, SysTick_CTRL_CLKSOURCE_Msk | SysTick_CTRL_ENABLE_Msk | SysTick_CTRL_TICKINT_Msk);
 }
 
 int main(void) {
     SystemClock_Config();
+    SysTick_Init();
     GPIO_Init();
     uart1_init();
 
     while (1) {
-        for (volatile uint32_t i = 0; i < 300000; i++) {}
+#if defined(BUILD_BOOTLOADER)
+        // bootloader
+        while (tick < 5000) {
+            // for (volatile uint32_t i = 0; i < 30000; i++) {} // задержка
+            delay_ms(30);
+            GPIOC->ODR ^= GPIO_PIN_13;
+        }
+        flash_jump_to_app();
+#else
+        // app
+        // for (volatile uint32_t i = 0; i < 300000; i++) {} // задержка
+        delay_ms(500);
         GPIOC->ODR ^= GPIO_PIN_13;
-
-        array_func[0].callback = func1;
-        array_func[1].callback = func2;
-        array_func[2].callback = func3;
-        executor();
-        uart1_send_str("\r\n");
-        // переназначаем функции в массиве
-        array_func[0].callback = func2;
-        array_func[1].callback = func1;
-        array_func[2].callback = func3;
-        executor();
-        uart1_send_str("\r\n end \r\n");
+#endif
     }
 }
 
-//последовательно выполняет функции
-void executor(void)
+#if defined(BUILD_BOOTLOADER)
+void flash_jump_to_app(void)
 {
+    RCC->APB1RSTR = 0xFFFFFFFF;
+    RCC->APB1RSTR = 0x00;
+    RCC->APB2RSTR = 0xFFFFFFFF;
+    RCC->APB2RSTR = 0x00;
+
+    SysTick->CTRL = 0;
+    SysTick->VAL = 0;
+    SysTick->LOAD = 0;
+
+    __disable_irq();
+
+    __set_BASEPRI(0);
+    __set_CONTROL(0);
     for (uint8_t i = 0; i < 3; i++) {
-        array_func[i].callback();
+        NVIC->ICER[i] = 0xFFFFFFFF;
+        NVIC->ICPR[i] = 0xFFFFFFFF;
     }
+    __enable_irq();
+
+    /* Function pointer to the address of the user application. */
+    pfunction jump_to_app;
+    jump_to_app = (pfunction)(*(volatile uint32_t *)(FLASH_APP_START_ADDRESS + 4));
+
+    /* Change the main and local  stack pointer. */
+    __set_MSP(*(volatile uint32_t *)FLASH_APP_START_ADDRESS);
+    SCB->VTOR = *(volatile uint32_t *)FLASH_APP_START_ADDRESS;
+
+    jump_to_app();
 }
+#endif
 
 void SystemClock_Config(void)
 {
@@ -144,9 +175,7 @@ void SystemClock_Config(void)
   */
 static void GPIO_Init(void)
 {
-    // тактирование порта A и C
-    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
-    RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
+    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN; // тактирование порта C
 
     // PC13 - выход, pp
     GPIOC->CRH &= ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13);  //для начала все сбрасываем в ноль
@@ -200,9 +229,23 @@ void uart1_send_str(char *str)
     }
 }
 
+void delay_ms(uint32_t ms)
+{
+    static uint32_t old_tick;
+    old_tick = tick;
+
+    while (tick - old_tick < ms) {
+    }
+}
+
 void Error_Handler(void) 
 {
     __disable_irq();
     while (1) {
     }
+}
+
+void SysTick_Handler(void)
+{
+    tick++;
 }
