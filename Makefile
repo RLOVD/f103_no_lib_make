@@ -26,8 +26,8 @@ OPT = -O2
 # paths
 #######################################
 # Build path
-BUILD_DIR = build
-BIN_DIR = bin
+BUILD_DIR = /tmp/ramdisk/build
+BIN_DIR =/tmp/ramdisk/bin
 
 ######################################
 # source
