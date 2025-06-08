@@ -3,18 +3,23 @@
 #include "stm32f1xx.h"
 
 #define GPIO_PIN_13         (1 << 13)
+#define GPIO_PIN_9          (1 << 9)
 
 void SystemClock_Config(void);
 static void GPIO_Init(void);
+static void Timer_Init(void);
 
 int main(void)
 {
     SystemClock_Config();
     GPIO_Init();
+    Timer_Init();
 
     while (1) {
-        for (volatile uint32_t i = 0; i < 300000; i++) {}
-        GPIOC->ODR ^= GPIO_PIN_13;
+        /*
+        for (volatile uint32_t i = 0; i < 3000000; i++) {}
+            GPIOC->ODR ^= GPIO_PIN_13;
+        */
     }
 }
 
@@ -63,7 +68,7 @@ void SystemClock_Config(void)
         /* RCC_CFGR_PLLMULL9 - множитель на 9. Если нужна другая частота, не 72МГц */
         /* то выбираем другой множитель. */
         RCC->CFGR &= (uint32_t)((uint32_t) ~(RCC_CFGR_PLLSRC | RCC_CFGR_PLLXTPRE | RCC_CFGR_PLLMULL));
-        RCC->CFGR |= (uint32_t)(RCC_CFGR_PLLSRC | RCC_CFGR_PLLMULL2);  // 16 MHz
+        RCC->CFGR |= (uint32_t)(RCC_CFGR_PLLSRC | RCC_CFGR_PLLMULL9);  // 72 MHz
 
         /* Включаем PLL */
         RCC->CR |= RCC_CR_PLLON;
@@ -100,15 +105,34 @@ static void GPIO_Init(void)
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN;
     RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
 
-    // PC13 - выход, pp
+    // PC13,PA9 - выход, pp
     GPIOC->CRH &= ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13);  //для начала все сбрасываем в ноль
+    GPIOA->CRH &= ~(GPIO_CRH_MODE9 | GPIO_CRH_CNF9);
 
     //MODE: выход с максимальной частотой 2 МГц
     //CNF: режим push-pull
     GPIOC->CRH |= (0x02 << GPIO_CRH_MODE13_Pos) | (0x00 << GPIO_CRH_CNF13_Pos);
+    GPIOA->CRH |= (0x02 << GPIO_CRH_MODE9_Pos) | (0x00 << GPIO_CRH_CNF9_Pos);
 }
 
-void Error_Handler(void) 
+static void Timer_Init(void)
+{
+    RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
+    TIM1->PSC = 0;
+    TIM1->ARR = 180 - 1;           // freq = TIM_CLK/((PSC+1)*(ARR+1))
+    TIM1->DIER = TIM_DIER_UIE;     // разрешена генерация запросов прерываний от таймера
+    NVIC_EnableIRQ(TIM1_UP_IRQn);  // включен вектор прерываний от таймера
+    TIM1->CR1 = TIM_CR1_CEN;       // запуск таймера
+}
+
+void TIM1_UP_IRQHandler(void)
+{
+    TIM1->SR = 0;
+    GPIOA->ODR ^= GPIO_PIN_9;
+    GPIOC->ODR ^= GPIO_PIN_13;
+}
+
+void Error_Handler(void)
 {
     __disable_irq();
     while (1) {
